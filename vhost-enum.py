@@ -49,31 +49,32 @@ def get_args():
     return parser.parse_args()
 
 
-def new_getaddrinfo(*args):
-    if args[0] in dns_cache:
-        return prv_getaddrinfo(dns_cache[args[0]], *args[1:])
-    else:
-        return prv_getaddrinfo(*args)
-
-
-def override_dns(domain, ip):
-    dns_cache[domain] = ip
+# def new_getaddrinfo(*args):
+#     if args[0] in dns_cache:
+#         return prv_getaddrinfo(dns_cache[args[0]], *args[1:])
+#     else:
+#         return prv_getaddrinfo(*args)
+#
+#
+# def override_dns(domain, ip):
+#     dns_cache[domain] = ip
 
 
 def get_site(ip, host, subdomain, tls, custom_port, http_session):
     url = f"{subdomain}.{host}"
+    headers = {'Host': url}
+    url = ip
     if tls:
-        if custom_port is None:
-            url = f"https://{url}:443"
-        else:
-            url = f"https://{url}:{custom_port}"
+        prefix = "https://"
     else:
-        if custom_port is None:
-            url = f"http://{url}:80"
-        else:
-            url = f"http://{url}:{custom_port}"
+        prefix = "http://"
+    if custom_port is not None:
+        url = f"{prefix}{url}:{custom_port}"
+    else:
+        url = f"{prefix}{url}"
     try:
-        response = http_session.get(url, verify=False)
+        # response = http_session.get(url, verify=False)
+        response = http_session.get(url, verify=False, headers=headers)
     except requests.exceptions.SSLError:
         logging.error(f"{url} was requested but SSL error occurred (is the site using TLS?).")
         return None, None
@@ -107,11 +108,11 @@ def consume_words(wordlist_queue, ip, port, tls, domain, l_baseline, h_baseline,
                 result_list.append(f"{word}.{domain}")
 
 
-def __generate_dns_cache(words_list, domain, ip):
-    logging.info("Generating DNS cache to use...")
-    for word in words_list:
-        url = f"{word}.{domain}"
-        override_dns(url, ip)
+# def __generate_dns_cache(words_list, domain, ip):
+#     logging.info("Generating DNS cache to use...")
+#     for word in words_list:
+#         url = f"{word}.{domain}"
+#         override_dns(url, ip)
 
 
 def __get_wordlist(wordlist_file):
@@ -153,7 +154,7 @@ def main():
     baseline = args.baseline
     threads = args.threads
     words_list = __get_wordlist(wordlist)
-    __generate_dns_cache(words_list, domain, ip)
+    # __generate_dns_cache(words_list, domain, ip)
     wordlist_queue = __get_wordlist_queue(words_list)
     l_baseline, h_baseline = get_site(ip, domain, baseline, tls, port, http_session=requests.session())
     if l_baseline is None or h_baseline is None:
@@ -184,9 +185,9 @@ def main():
 
 if __name__ == '__main__':
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    dns_cache = {}
-    prv_getaddrinfo = socket.getaddrinfo
-    socket.getaddrinfo = new_getaddrinfo
+    # dns_cache = {}
+    # prv_getaddrinfo = socket.getaddrinfo
+    # socket.getaddrinfo = new_getaddrinfo
     formatter = CustomFormatter()
     hdlr = logging.StreamHandler(sys.stdout)
     hdlr.setFormatter(formatter)

@@ -39,6 +39,7 @@ optional arguments:
                         The baseline subdomain to use
   -t THREADS, --threads THREADS
                         Number of threads to use
+  -v, --verbose         Set loglevel to DEBUG
 ```
 
 The `-w` options is to specify a newline separated list of words to use a subdomains. This can include also
@@ -59,7 +60,9 @@ The `-b` option is used to specify the baseline subdomain, so one domain that we
 
 The `-t` option is used to specify how many threads to use as workers (to make requests).
 
-The login is the following:
+The `-v` options enables debug logging.
+
+The logic is the following:
 
 * All requests will skip DNS resolution, that will be overridden with the IP specified. 
 * A request to baseline.domain:port (or `80`/`443` depending on `-s` if `-p` is not specified) will be performed. The
