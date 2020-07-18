@@ -45,8 +45,7 @@ optional arguments:
 The `-w` options is to specify a newline separated list of words to use a subdomains. This can include also
 sub-subdomains (e.g., `dev.test`).
 
-The `-s` option is used to specify whether we want TLS or not. If the options is set, the requests will be made to port
-`443`, otherwise they will go to port `80`, unless `-p` is specified.
+The `-s` option is used to specify whether we want TLS or not.
 
 The `-i` option is used to specify the IP to use for the DNS resolution (e.g., `10.10.10.1`).
 
@@ -64,11 +63,8 @@ The `-v` options enables debug logging.
 
 The logic is the following:
 
-* All requests will skip DNS resolution, that will be overridden with the IP specified. 
-* A request to baseline.domain:port (or `80`/`443` depending on `-s` if `-p` is not specified) will be performed. The
-length and hash of the response content will be saved and used to compare the response coming from other virtualhosts.
-* A request to word.domain:port (or `80`/`443` depending on `-s` if `-p` is not specified) will be performed, for every `word` in
-the wordlist.
+* A request to baseline.domain:port will be performed. The length and hash of the response content will be saved and used to compare the response for other virtualhosts.
+* A request to word.domain:port will be performed, for every `word` in the wordlist.
 
 At this point, the script makes the following choices:
 
@@ -98,4 +94,21 @@ chmod +x vhost-enum.py
 ./vhost-enum.py -h
 # Or, in alternative
 python3 vhost-enum.py -h
+```
+
+## Why?
+
+Awesome tools such as `wfuzz` or `ffuf` can do already a very similar job. The only difference is that they require
+to filter out the size of the length for a false positive. This is mostly a convenience tool to do the same
+thing in a *slightly* more comfortable way.
+
+Example:
+```
+curl -s http://baseline.domain.com|wc -l
+# we get 5093
+ffuf -c -w wordlist.txt -u http://baseline.domain.com -H 'Host: FUZZ.domain.com` -fs 5093
+```
+
+```
+python3 vhost-enum.py -i 192.168.0.100 -d domain.com -b baseline -t 40 -w wordlist.txt
 ```
