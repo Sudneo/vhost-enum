@@ -126,6 +126,7 @@ def __get_wordlist(wordlist_file):
     words = filter(None, words)
     # Removes duplicates
     words = set(words)
+    words = [w.lower() for w in words]
     return words
 
 
