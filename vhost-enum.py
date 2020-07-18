@@ -10,10 +10,6 @@ import time
 import threading
 import urllib3
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-dns_cache = {}
-prv_getaddrinfo = socket.getaddrinfo
-
 
 class CustomFormatter(logging.Formatter):
 
@@ -40,21 +36,6 @@ class CustomFormatter(logging.Formatter):
         return result
 
 
-def new_getaddrinfo(*args):
-    if args[0] in dns_cache:
-        return prv_getaddrinfo(dns_cache[args[0]], *args[1:])
-    else:
-        return prv_getaddrinfo(*args)
-
-
-socket.getaddrinfo = new_getaddrinfo
-
-
-# Capture a dict of hostname and their IPs to override with
-def override_dns(domain, ip):
-    dns_cache[domain] = ip
-
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-w", "--wordlist", help="The wordlist to use", default="./vhosts.txt", required=False)
@@ -68,9 +49,19 @@ def get_args():
     return parser.parse_args()
 
 
+def new_getaddrinfo(*args):
+    if args[0] in dns_cache:
+        return prv_getaddrinfo(dns_cache[args[0]], *args[1:])
+    else:
+        return prv_getaddrinfo(*args)
+
+
+def override_dns(domain, ip):
+    dns_cache[domain] = ip
+
+
 def get_site(ip, host, subdomain, tls, custom_port, http_session):
     url = f"{subdomain}.{host}"
-    override_dns(url, ip)
     if tls:
         if custom_port is None:
             url = f"https://{url}:443"
@@ -102,26 +93,6 @@ def get_site(ip, host, subdomain, tls, custom_port, http_session):
         return None, None
 
 
-def get_wordlist_queue(wordlist_file):
-    logging.info("Generating wordlist...")
-    words_queue = queue.Queue()
-    try:
-        with open(wordlist_file) as fp:
-            content = fp.read()
-            words = content.split('\n')
-    except FileNotFoundError:
-        logging.error(f"File {wordlist_file} does not exist. Aborting.")
-        exit(1)
-    # Removes empty lines
-    words = filter(None, words)
-    # Removes duplicates
-    words = set(words)
-    for w in words:
-        words_queue.put(w)
-    logging.info(f"Loaded {words_queue.qsize()} words.")
-    return words_queue
-
-
 def consume_words(wordlist_queue, ip, port, tls, domain, l_baseline, h_baseline, result_list):
     http_session = requests.session()
     while not wordlist_queue.empty():
@@ -134,6 +105,37 @@ def consume_words(wordlist_queue, ip, port, tls, domain, l_baseline, h_baseline,
             else:
                 logging.info(f"{word}.{domain} returns 200 and seems a different site")
                 result_list.append(f"{word}.{domain}")
+
+
+def __generate_dns_cache(words_list, domain, ip):
+    logging.info("Generating DNS cache to use...")
+    for word in words_list:
+        url = f"{word}.{domain}"
+        override_dns(url, ip)
+
+
+def __get_wordlist(wordlist_file):
+    try:
+        with open(wordlist_file) as fp:
+            content = fp.read()
+            words = content.split('\n')
+    except FileNotFoundError:
+        logging.error(f"File {wordlist_file} does not exist. Aborting.")
+        exit(1)
+    # Removes empty lines
+    words = filter(None, words)
+    # Removes duplicates
+    words = set(words)
+    return words
+
+
+def __get_wordlist_queue(words_list):
+    logging.info("Generating wordlist...")
+    words_queue = queue.Queue()
+    for w in words_list:
+        words_queue.put(w)
+    logging.info(f"Loaded {words_queue.qsize()} words.")
+    return words_queue
 
 
 def main():
@@ -149,7 +151,9 @@ def main():
     domain = args.domain
     baseline = args.baseline
     threads = args.threads
-    wordlist_queue = get_wordlist_queue(wordlist)
+    words_list = __get_wordlist(wordlist)
+    __generate_dns_cache(words_list, domain, ip)
+    wordlist_queue = __get_wordlist_queue(words_list)
     l_baseline, h_baseline = get_site(ip, domain, baseline, tls, port, http_session=requests.session())
     if l_baseline is None or h_baseline is None:
         logging.error(f"Establishing baseline failed. Make sure that {baseline}.{domain} exists "
@@ -178,6 +182,10 @@ def main():
 
 
 if __name__ == '__main__':
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    dns_cache = {}
+    prv_getaddrinfo = socket.getaddrinfo
+    socket.getaddrinfo = new_getaddrinfo
     formatter = CustomFormatter()
     hdlr = logging.StreamHandler(sys.stdout)
     hdlr.setFormatter(formatter)
