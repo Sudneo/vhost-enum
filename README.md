@@ -112,3 +112,7 @@ ffuf -c -w wordlist.txt -u http://baseline.domain.com -H 'Host: FUZZ.domain.com`
 ```
 python3 vhost-enum.py -i 192.168.0.100 -d domain.com -b baseline -t 40 -w wordlist.txt
 ```
+
+At the same time, other tools more sophisticated then this can do the same and more, such as [vhostscan](https://github.com/codingo/VHostScan).
+
+I guess here it comes the pleasure of just writing your own tool :)
