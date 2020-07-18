@@ -60,7 +60,7 @@ def get_site(ip, host, subdomain, tls, custom_port, http_session):
     except requests.exceptions.SSLError:
         print(f"\t[-] {url} was requested but SSL error occurred (is the site using TLS?).")
         return None, None
-    except ConnectionError:
+    except requests.exceptions.ConnectionError:
         print(f"\t[-] Failed to connect to {ip}.")
         return None, None
     if response.status_code == 200:
