@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import hashlib
+import logging
 import queue
 import requests
 import socket
+import sys
 import time
 import threading
 import urllib3
@@ -13,8 +15,31 @@ dns_cache = {}
 prv_getaddrinfo = socket.getaddrinfo
 
 
-# Override default socket.getaddrinfo() and pass ip instead of host
-# if override is detected
+class CustomFormatter(logging.Formatter):
+
+    err_fmt = "[-] %(msg)s"
+    wrn_fmt = "[!] %(msg)s"
+    dbg_fmt = "DEBUG: %(msg)s"
+    info_fmt = "[+] %(msg)s"
+
+    def __init__(self):
+        super().__init__(fmt="%(levelno)d: %(msg)s", datefmt=None, style='%')
+
+    def format(self, record):
+        format_orig = self._style._fmt
+        if record.levelno == logging.DEBUG:
+            self._style._fmt = CustomFormatter.dbg_fmt
+        elif record.levelno == logging.INFO:
+            self._style._fmt = CustomFormatter.info_fmt
+        elif record.levelno == logging.ERROR:
+            self._style._fmt = CustomFormatter.err_fmt
+        elif record.levelno == logging.WARNING:
+            self._style._fmt = CustomFormatter.wrn_fmt
+        result = logging.Formatter.format(self, record)
+        self._style._fmt = format_orig
+        return result
+
+
 def new_getaddrinfo(*args):
     if args[0] in dns_cache:
         return prv_getaddrinfo(dns_cache[args[0]], *args[1:])
@@ -39,6 +64,7 @@ def get_args():
     parser.add_argument("-d", "--domain", help="The domain to use", required=True)
     parser.add_argument('-b', "--baseline", help="The baseline subdomain to use", default="www")
     parser.add_argument('-t', "--threads", default=1, help="Number of threads to use", type=int)
+    parser.add_argument('-v', "--verbose", action='store_true', help="Set loglevel to DEBUG")
     return parser.parse_args()
 
 
@@ -58,13 +84,13 @@ def get_site(ip, host, subdomain, tls, custom_port, http_session):
     try:
         response = http_session.get(url, verify=False)
     except requests.exceptions.SSLError:
-        print(f"\t[-] {url} was requested but SSL error occurred (is the site using TLS?).")
+        logging.error(f"{url} was requested but SSL error occurred (is the site using TLS?).")
         return None, None
     except requests.exceptions.ConnectionError:
-        print(f"\t[-] Failed to connect to {ip}.")
+        logging.error(f"Failed to connect to {ip}.")
         return None, None
     except requests.exceptions.InvalidURL:
-        print(f"\t[-] Url {url} is invalid.")
+        logging.error(f"Url {url} is invalid.")
         return None, None
     if response.status_code == 200:
         length = len(response.content)
@@ -72,19 +98,19 @@ def get_site(ip, host, subdomain, tls, custom_port, http_session):
         hash_value = hash_object.hexdigest()
         return length, hash_value
     else:
-        print(f"\t[-] Request to {url} failed.")
+        logging.error(f"Request to {url} failed.")
         return None, None
 
 
 def get_wordlist_queue(wordlist_file):
-    print("[+] Generating wordlist...")
+    logging.info("Generating wordlist...")
     words_queue = queue.Queue()
     try:
         with open(wordlist_file) as fp:
             content = fp.read()
             words = content.split('\n')
     except FileNotFoundError:
-        print(f"[-] File {wordlist_file} does not exist. Aborting.")
+        logging.error(f"File {wordlist_file} does not exist. Aborting.")
         exit(1)
     # Removes empty lines
     words = filter(None, words)
@@ -92,7 +118,7 @@ def get_wordlist_queue(wordlist_file):
     words = set(words)
     for w in words:
         words_queue.put(w)
-    print(f"[+] Loaded {words_queue.qsize()} words.")
+    logging.info(f"Loaded {words_queue.qsize()} words.")
     return words_queue
 
 
@@ -103,14 +129,19 @@ def consume_words(wordlist_queue, ip, port, tls, domain, l_baseline, h_baseline,
         length, digest = get_site(ip, domain, word.rstrip('\n'), tls, port, http_session)
         if length is not None and digest is not None:
             if length == l_baseline or digest == h_baseline:
-                print(f"\t[!] {word}.{domain} returns 200, but the content seems to be the same as the one of main site.")
+                logging.debug(f"{word}.{domain} returns 200, but the content seems to be the same"
+                              f" as the one of main site.")
             else:
-                print(f"\t[+] {word}.{domain} returns 200 and seems a different site")
+                logging.info(f"{word}.{domain} returns 200 and seems a different site")
                 result_list.append(f"{word}.{domain}")
 
 
 def main():
     args = get_args()
+    if args.verbose:
+        logging.root.setLevel(logging.DEBUG)
+    else:
+        logging.root.setLevel(logging.INFO)
     wordlist = args.wordlist
     tls = args.tls
     ip = args.ip
@@ -121,14 +152,14 @@ def main():
     wordlist_queue = get_wordlist_queue(wordlist)
     l_baseline, h_baseline = get_site(ip, domain, baseline, tls, port, http_session=requests.session())
     if l_baseline is None or h_baseline is None:
-        print(f"[-] Establishing baseline failed. Make sure that {baseline}.{domain} exists "
-              f"and that you are using the correct port.")
+        logging.error(f"Establishing baseline failed. Make sure that {baseline}.{domain} exists "
+                      f"and that you are using the correct port.")
         exit(1)
-    print(f"[+] Established baseline: {baseline}.{domain} returns a "
-          f"page of {l_baseline} bytes and with hash {h_baseline}.")
+    logging.info(f"Established baseline: {baseline}.{domain} returns a "
+                 f"page of {l_baseline} bytes and with hash {h_baseline}.")
     confirmed = list()
     threads_list = list()
-    print(f"[+] Spawning {threads} thread(s)...")
+    logging.info(f"Spawning {threads} thread(s)...")
     timestamp_start = time.time()
     for i in range(threads):
         worker = threading.Thread(target=consume_words, args=(wordlist_queue, ip, port, tls, domain, l_baseline,
@@ -137,15 +168,18 @@ def main():
         worker.start()
     for thread in threads_list:
         thread.join()
-    print(f"[+] Job completed in {time.time()-timestamp_start} seconds.")
+    logging.info(f"Job completed in {time.time()-timestamp_start} seconds.")
     if len(confirmed) > 0:
-        print("[+] The following virtualhost were discovered:")
+        logging.info("The following virtualhost were discovered:")
         for site in confirmed:
             print(f"* {site}")
     else:
-        print("[-] No virtualhosts were discovered.")
+        logging.warning("No virtualhosts were discovered.")
 
 
 if __name__ == '__main__':
+    formatter = CustomFormatter()
+    hdlr = logging.StreamHandler(sys.stdout)
+    hdlr.setFormatter(formatter)
+    logging.root.addHandler(hdlr)
     main()
-
