@@ -8,6 +8,7 @@ import sys
 import time
 import threading
 import urllib3
+from requests import adapters
 
 
 class CustomFormatter(logging.Formatter):
@@ -132,6 +133,8 @@ def main():
         prefix = "https://"
     else:
         prefix = "http://"
+    adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=len(words_list))
+    http_session.mount(prefix, adapter)
     l_baseline, h_baseline = get_site(ip, domain, baseline, prefix, port)
     if l_baseline is None or h_baseline is None:
         logging.error(f"Establishing baseline failed. Make sure that {baseline}.{domain} exists "
