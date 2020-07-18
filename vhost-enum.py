@@ -100,7 +100,6 @@ def __get_wordlist(wordlist_file):
     # Removes empty lines
     words = filter(None, words)
     # Removes duplicates
-    words = set(words)
     words = [w.lower() for w in words]
     return words
 
@@ -156,7 +155,7 @@ def main():
     logging.info(f"Job completed in {time.time()-timestamp_start} seconds.")
     if len(confirmed) > 0:
         logging.info("The following virtualhost were discovered:")
-        for site in confirmed:
+        for site in set(confirmed):
             print(f"* {site}")
     else:
         logging.warning("No virtualhosts were discovered.")
