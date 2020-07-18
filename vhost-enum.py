@@ -63,6 +63,9 @@ def get_site(ip, host, subdomain, tls, custom_port, http_session):
     except requests.exceptions.ConnectionError:
         print(f"\t[-] Failed to connect to {ip}.")
         return None, None
+    except requests.exceptions.InvalidURL:
+        print(f"\t[-] Url {url} is invalid.")
+        return None, None
     if response.status_code == 200:
         length = len(response.content)
         hash_object = hashlib.sha256(response.content)
