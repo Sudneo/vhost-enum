@@ -131,7 +131,7 @@ def __get_wordlist(wordlist_file):
 
 
 def __get_wordlist_queue(words_list):
-    logging.info("Generating wordlist...")
+    logging.info("Generating wordlist queue...")
     words_queue = queue.Queue()
     for w in words_list:
         words_queue.put(w)
