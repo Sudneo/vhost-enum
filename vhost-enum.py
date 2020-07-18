@@ -4,7 +4,6 @@ import hashlib
 import logging
 import queue
 import requests
-import socket
 import sys
 import time
 import threading
@@ -44,36 +43,18 @@ def get_args():
     parser.add_argument("-p", "--port", help="A custom port to use")
     parser.add_argument("-d", "--domain", help="The domain to use", required=True)
     parser.add_argument('-b', "--baseline", help="The baseline subdomain to use", default="www")
-    parser.add_argument('-t', "--threads", default=1, help="Number of threads to use", type=int)
+    parser.add_argument('-t', "--threads", default=10, help="Number of threads to use", type=int)
     parser.add_argument('-v', "--verbose", action='store_true', help="Set loglevel to DEBUG")
     return parser.parse_args()
 
 
-# def new_getaddrinfo(*args):
-#     if args[0] in dns_cache:
-#         return prv_getaddrinfo(dns_cache[args[0]], *args[1:])
-#     else:
-#         return prv_getaddrinfo(*args)
-#
-#
-# def override_dns(domain, ip):
-#     dns_cache[domain] = ip
-
-
-def get_site(ip, host, subdomain, tls, custom_port, http_session):
-    url = f"{subdomain}.{host}"
-    headers = {'Host': url}
-    url = ip
-    if tls:
-        prefix = "https://"
-    else:
-        prefix = "http://"
+def get_site(ip, host, subdomain, prefix, custom_port):
+    hostname = f"{subdomain}.{host}"
+    headers = {'Host': hostname}
+    url = f"{prefix}{ip}"
     if custom_port is not None:
-        url = f"{prefix}{url}:{custom_port}"
-    else:
-        url = f"{prefix}{url}"
+        url = f"{url}:{custom_port}"
     try:
-        # response = http_session.get(url, verify=False)
         response = http_session.get(url, verify=False, headers=headers)
     except requests.exceptions.SSLError:
         logging.error(f"{url} was requested but SSL error occurred (is the site using TLS?).")
@@ -94,25 +75,17 @@ def get_site(ip, host, subdomain, tls, custom_port, http_session):
         return None, None
 
 
-def consume_words(wordlist_queue, ip, port, tls, domain, l_baseline, h_baseline, result_list):
-    http_session = requests.session()
+def consume_words(wordlist_queue, ip, port, prefix, domain, l_baseline, h_baseline, result_list):
     while not wordlist_queue.empty():
         word = wordlist_queue.get()
-        length, digest = get_site(ip, domain, word.rstrip('\n'), tls, port, http_session)
+        length, digest = get_site(ip, domain, word.rstrip('\n'), prefix, port)
         if length is not None and digest is not None:
-            if length == l_baseline or digest == h_baseline:
-                logging.debug(f"{word}.{domain} returns 200, but the content seems to be the same"
-                              f" as the one of main site.")
-            else:
+            if length != l_baseline and digest != h_baseline:
                 logging.info(f"{word}.{domain} returns 200 and seems a different site")
                 result_list.append(f"{word}.{domain}")
-
-
-# def __generate_dns_cache(words_list, domain, ip):
-#     logging.info("Generating DNS cache to use...")
-#     for word in words_list:
-#         url = f"{word}.{domain}"
-#         override_dns(url, ip)
+            else:
+                logging.debug(f"{word}.{domain} returns 200, but the content seems to be the same"
+                              f" as the one of main site.")
 
 
 def __get_wordlist(wordlist_file):
@@ -154,9 +127,12 @@ def main():
     baseline = args.baseline
     threads = args.threads
     words_list = __get_wordlist(wordlist)
-    # __generate_dns_cache(words_list, domain, ip)
     wordlist_queue = __get_wordlist_queue(words_list)
-    l_baseline, h_baseline = get_site(ip, domain, baseline, tls, port, http_session=requests.session())
+    if tls:
+        prefix = "https://"
+    else:
+        prefix = "http://"
+    l_baseline, h_baseline = get_site(ip, domain, baseline, prefix, port)
     if l_baseline is None or h_baseline is None:
         logging.error(f"Establishing baseline failed. Make sure that {baseline}.{domain} exists "
                       f"and that you are using the correct port.")
@@ -168,7 +144,7 @@ def main():
     logging.info(f"Spawning {threads} thread(s)...")
     timestamp_start = time.time()
     for i in range(threads):
-        worker = threading.Thread(target=consume_words, args=(wordlist_queue, ip, port, tls, domain, l_baseline,
+        worker = threading.Thread(target=consume_words, args=(wordlist_queue, ip, port, prefix, domain, l_baseline,
                                                               h_baseline, confirmed))
         threads_list.append(worker)
         worker.start()
@@ -185,12 +161,10 @@ def main():
 
 if __name__ == '__main__':
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    # dns_cache = {}
-    # prv_getaddrinfo = socket.getaddrinfo
-    # socket.getaddrinfo = new_getaddrinfo
     formatter = CustomFormatter()
     hdlr = logging.StreamHandler(sys.stdout)
     hdlr.setFormatter(formatter)
     logging.root.addHandler(hdlr)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    http_session = requests.session()
     main()
