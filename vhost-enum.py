@@ -86,8 +86,8 @@ def get_site(ip, host, subdomain, tls, custom_port, http_session):
     except requests.exceptions.SSLError:
         logging.error(f"{url} was requested but SSL error occurred (is the site using TLS?).")
         return None, None
-    except requests.exceptions.ConnectionError:
-        logging.error(f"Failed to connect to {ip}.")
+    except requests.exceptions.ConnectionError as error:
+        logging.error(f"Failed to connect to {ip}.\n{error}")
         return None, None
     except requests.exceptions.InvalidURL:
         logging.error(f"Url {url} is invalid.")
@@ -182,4 +182,5 @@ if __name__ == '__main__':
     hdlr = logging.StreamHandler(sys.stdout)
     hdlr.setFormatter(formatter)
     logging.root.addHandler(hdlr)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
     main()
