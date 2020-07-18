@@ -81,3 +81,18 @@ added to the discovered ones and will be reported.
 The wordlist included by default with this repo is for test purposes only (still faster to dump ideas there that in hosts file). 
 In order to find appropriate lists, it might be possible to use [Cewl](https://github.com/digininja/CeWL) o generate
 a custom one or use some generic list from [seclists](https://github.com/danielmiessler/SecLists/blob/master/Discovery/DNS/bitquark-subdomains-top100000.txt) or similar projects.
+
+## Installation
+
+The installation is pretty straightforward
+
+Clone the repo and install requirements (the only package required is requests).
+```bash
+git clone https://github.com/sudneo/vhost-enum
+cd vhost-enum
+pip3 install -r requirements.txt
+chmod +x vhost-enum.py
+./vhost-enum.py -h
+# Or, in alternative
+python3 vhost-enum.py -h
+```
